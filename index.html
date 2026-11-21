@@ -139,8 +139,8 @@
           <a href="https://codeforces.com/profile/siam-35862" target="_blank" rel="noopener noreferrer" class="font-mono text-xs text-sky-600 dark:text-sky-400 hover:underline">siam-35862</a>
           <ul class="mt-3 space-y-1.5 text-sm text-slate-600 dark:text-slate-300 list-disc list-inside">
             <li>Maximum rating of <span id="max-cf" class="font-semibold text-slate-900 dark:text-white">1530 (Specialist)</span></li>
-            <li>Solved <span id="solved-cf" class="font-semibold text-slate-900 dark:text-white">1750+</span> problems</li>
-            <li>Participated in <span id="contests-cf" class="font-semibold text-slate-900 dark:text-white">150+</span> contests</li>
+            <li>Solved 1750+ problems</li>
+            <li>Participated in 150+ contests</li>
           </ul>
         </div>
         <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6">
@@ -148,8 +148,8 @@
           <a href="https://www.codechef.com/users/siam35862" target="_blank" rel="noopener noreferrer" class="font-mono text-xs text-sky-600 dark:text-sky-400 hover:underline">siam35862</a>
           <ul class="mt-3 space-y-1.5 text-sm text-slate-600 dark:text-slate-300 list-disc list-inside">
             <li>Maximum rating of <span id="max-cc" class="font-semibold text-slate-900 dark:text-white">1747 (3 Star)</span></li>
-            <li>Solved <span id="solved-cc" class="font-semibold text-slate-900 dark:text-white">150+</span> problems</li>
-            <li>Participated in <span id="contests-cc" class="font-semibold text-slate-900 dark:text-white">22+</span> contests</li>
+            <li>Solved 150+ problems</li>
+            <li>Participated in 22+ contests</li>
           </ul>
         </div>
         <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6">
@@ -157,8 +157,8 @@
           <a href="https://atcoder.jp/users/siam35862" target="_blank" rel="noopener noreferrer" class="font-mono text-xs text-sky-600 dark:text-sky-400 hover:underline">siam35862</a>
           <ul class="mt-3 space-y-1.5 text-sm text-slate-600 dark:text-slate-300 list-disc list-inside">
             <li>Maximum rating of <span id="max-ac" class="font-semibold text-slate-900 dark:text-white">903 (6 Kyu)</span></li>
-            <li>Solved <span id="solved-ac" class="font-semibold text-slate-900 dark:text-white">170+</span> problems</li>
-            <li>Participated in <span id="contests-ac" class="font-semibold text-slate-900 dark:text-white">28+</span> contests</li>
+            <li>Solved 170+ problems</li>
+            <li>Participated in 28+ contests</li>
           </ul>
         </div>
         <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6">
@@ -166,12 +166,11 @@
           <a href="https://leetcode.com/u/siam35862/" target="_blank" rel="noopener noreferrer" class="font-mono text-xs text-sky-600 dark:text-sky-400 hover:underline">siam35862</a>
           <ul class="mt-3 space-y-1.5 text-sm text-slate-600 dark:text-slate-300 list-disc list-inside">
             <li>Maximum rating of <span id="max-lc" class="font-semibold text-slate-900 dark:text-white">1585 (Top 26.32%)</span></li>
-            <li>Solved <span id="solved-lc" class="font-semibold text-slate-900 dark:text-white">90+</span> problems</li>
-            <li id="li-contests-lc" class="hidden">Participated in <span id="contests-lc" class="font-semibold text-slate-900 dark:text-white"></span> contests</li>
-          </ul>
+            <li>Solved 90+ problems</li>
+            </ul>
         </div>
       </div>
-      <p id="summary-total" class="mt-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 font-mono text-sm text-emerald-700 dark:text-emerald-300">
+      <p class="mt-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 font-mono text-sm text-emerald-700 dark:text-emerald-300">
         Summary: Solved 2500+ problems across various online judges and participated in a total of 200+ contests.
       </p>
     </section>
@@ -351,13 +350,16 @@
       render('list-iupc', iupc);
       render('list-solo', solo);
 
-      // ---- Live stats (max rating, problems solved, contests attended), looked up by username ----
-      // Order: live browser lookups -> ratings.json (refreshed by the GitHub Action) -> README values in the page.
-      const USERS = { codeforces: 'siam-35862', codechef: 'siam35862', atcoder: 'siam35862', leetcode: 'siam35862' };
-      // README numbers, used in the summary until live values arrive.
-      const totals = { cf: { solved: 1750, contests: 150 }, cc: { solved: 150, contests: 22 }, ac: { solved: 170, contests: 28 }, lc: { solved: 90, contests: 0 } };
-      const OTHER_SOLVED = 0; // add problems solved on other judges here, if you want them in the total
+      // ---- Live max ratings, looked up by username ----
+      // Falls back to the README value already in the page if every source fails.
+      const USERS = {
+        codeforces: 'siam-35862',
+        codechef: 'siam35862',
+        atcoder: 'siam35862',
+        leetcode: 'siam35862',
+      };
 
+      // Try the URL directly, then through public CORS proxies (browsers block many judge sites).
       const viaProxies = (url) => [
         url,
         `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
@@ -368,7 +370,7 @@
         let lastErr;
         for (const u of urls) {
           const ctrl = new AbortController();
-          const t = setTimeout(() => ctrl.abort(), 15000);
+          const t = setTimeout(() => ctrl.abort(), 9000);
           try {
             const r = await fetch(u, { ...init, signal: ctrl.signal });
             if (!r.ok) throw new Error(`${r.status} ${u}`);
@@ -377,165 +379,72 @@
         }
         throw lastErr;
       };
-      const json = async (urls, init) => JSON.parse(await fetchText(urls, init));
       const tryEach = async (fns) => {
-        for (const fn of fns) { try { const v = await fn(); if (v != null) return v; } catch (e) { console.debug('stats source failed:', e); } }
+        for (const fn of fns) { try { const v = await fn(); if (v != null) return v; } catch (e) { console.debug('rating source failed:', e); } }
         return null;
       };
-      let fileCache;
-      const ratingsFile = () => (fileCache ||= json(['ratings.json'], { cache: 'no-store' }).catch(() => ({})));
-
-      // Live source first; any field it lacks is filled from ratings.json. src[field] = 'live' | 'file'.
-      const gather = async (key, fns) => {
-        const live = (await tryEach(fns)) || {};
-        const file = (await ratingsFile())[key] || {};
-        const out = { src: {} };
-        for (const f of ['max', 'rank', 'solved', 'contests']) {
-          if (live[f] != null) { out[f] = live[f]; out.src[f] = 'live'; }
-          else if (file[f] != null) { out[f] = file[f]; out.src[f] = 'file'; }
-        }
-        return out;
-      };
-
-      const show = (id, text, src) => {
+      const show = (id, text) => {
         const el = document.getElementById(id);
         if (!el) return;
-        const tip = src === 'file' ? 'Updated by GitHub Action' : 'Fetched live';
-        el.innerHTML = esc(text) + ` <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle" title="${tip}"></span>`;
+        el.innerHTML = esc(text) + ' <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle" title="Fetched live"></span>';
       };
-      const updateSummary = () => {
-        const el = document.getElementById('summary-total');
-        if (!el) return;
-        const vals = Object.values(totals);
-        const s = OTHER_SOLVED + vals.reduce((a, t) => a + t.solved, 0);
-        const c = vals.reduce((a, t) => a + t.contests, 0);
-        el.textContent = `Summary: Solved ${s.toLocaleString()} problems across Codeforces, CodeChef, AtCoder and LeetCode and participated in a total of ${c.toLocaleString()} contests.`;
-      };
-      // Writes solved/contests for one judge and refreshes the summary.
-      const applyCounts = (key, d) => {
-        let any = false;
-        for (const f of ['solved', 'contests']) {
-          if (d[f] == null) continue;
-          any = true;
-          totals[key][f] = d[f];
-          show(`${f}-${key}`, d[f].toLocaleString(), d.src[f]);
-        }
-        if (key === 'lc' && d.contests) document.getElementById('li-contests-lc')?.classList.remove('hidden');
-        if (any) updateSummary();
-      };
-
       const cap = (w) => w.replace(/\b\w/g, (c) => c.toUpperCase());
       const ccStars = (r) => (r >= 2500 ? 7 : r >= 2200 ? 6 : r >= 2000 ? 5 : r >= 1800 ? 4 : r >= 1600 ? 3 : r >= 1400 ? 2 : 1);
-      const acKyu = (r) => (r < 2000 ? ` (${Math.max(10 - Math.floor(r / 200), 1)} Kyu)` : '');
-      const maxOf = (arr, key) => (arr.length ? Math.round(Math.max(...arr.map((c) => c[key]))) : null);
-      const nonEmpty = (o) => (Object.values(o).some((v) => v != null) ? o : null);
 
-      // Codeforces: official API (user.info, user.rating, user.status)
-      (async () => {
-        const U = USERS.codeforces, base = 'https://codeforces.com/api/';
-        const d = await gather('codeforces', [async () => {
-          const [info, rating, status, profile] = await Promise.all([
-            json(viaProxies(`${base}user.info?handles=${U}`)),
-            json(viaProxies(`${base}user.rating?handle=${U}`)).catch(() => null),
-            json(viaProxies(`${base}user.status?handle=${U}`)).catch(() => null),
-            fetchText(viaProxies(`https://codeforces.com/profile/${U}`)).catch(() => null),
-          ]);
-          const u = info.result[0];
-          const apiSolved = status
-            ? new Set(status.result.filter((s) => s.verdict === 'OK')
-                .map((s) => `${s.problem.contestId || s.problem.problemsetName}-${s.problem.index}`)).size
-            : 0;
-          // The profile page also counts solves the API can't see (e.g. private groups), so prefer the larger number.
-          const mp = profile && profile.match(/([\d,]+)\s+problems?\s*<\/div>\s*<div[^>]*>\s*solved for all time/i);
-          const profileSolved = mp ? Number(mp[1].replace(/,/g, '')) : 0;
-          const solved = Math.max(apiSolved, profileSolved) || null;
-          return nonEmpty({ max: u.maxRating, rank: u.maxRank, solved, contests: rating ? rating.result.length : null });
-        }]);
-        if (d.max != null) show('max-cf', `${d.max}${d.rank ? ` (${cap(d.rank)})` : ''}`, d.src.max);
-        applyCounts('cf', d);
-      })().catch(() => {});
+      // Codeforces: official API (maxRating + maxRank)
+      tryEach([async () => {
+        const d = JSON.parse(await fetchText(viaProxies(`https://codeforces.com/api/user.info?handles=${USERS.codeforces}`)));
+        const u = d.result[0];
+        return u.maxRating ? `${u.maxRating} (${cap(u.maxRank)})` : null;
+      }]).then((v) => v && show('max-cf', v));
 
-      // AtCoder: contest history (kenkoooo proxy, then atcoder.jp) + kenkoooo AC count
-      (async () => {
-        const U = USERS.atcoder;
-        const d = await gather('atcoder', [async () => {
-          const [h, ac] = await Promise.all([
-            json([`https://kenkoooo.com/atcoder/proxy/users/${U}/history/json`]).catch(() => json(viaProxies(`https://atcoder.jp/users/${U}/history/json`))),
-            json([`https://kenkoooo.com/atcoder/atcoder-api/v3/user/ac_rank?user=${U}`]).catch(() => null),
-          ]);
-          return nonEmpty({ max: maxOf(h.filter((c) => c.IsRated), 'NewRating'), contests: h.length, solved: ac ? ac.count : null });
-        }]);
-        if (d.max != null) show('max-ac', `${d.max}${acKyu(d.max)}`, d.src.max);
-        applyCounts('ac', d);
-      })().catch(() => {});
+      // AtCoder: contest history, highest NewRating
+      tryEach([
+        async () => JSON.parse(await fetchText([`https://kenkoooo.com/atcoder/proxy/users/${USERS.atcoder}/history/json`])),
+        async () => JSON.parse(await fetchText(viaProxies(`https://atcoder.jp/users/${USERS.atcoder}/history/json`))),
+      ]).then((h) => {
+        const rated = (h || []).filter((c) => c.IsRated);
+        if (!rated.length) return;
+        const max = Math.max(...rated.map((c) => c.NewRating));
+        const el = document.getElementById('max-ac');
+        const keepRank = el && el.textContent.startsWith('903') && max === 903 ? ' (6 Kyu)' : '';
+        show('max-ac', `${max}${keepRank}`);
+      });
 
-      // CodeChef: profile page (rating, problems solved, contests), then unofficial APIs for the rating
-      (async () => {
-        const U = USERS.codechef;
-        const d = await gather('codechef', [
-          async () => {
-            const html = await fetchText(viaProxies(`https://www.codechef.com/users/${U}`));
-            const grab = (re) => { const m = html.match(re); return m ? Number(m[1]) : null; };
-            return nonEmpty({
-              max: grab(/Highest Rating\s*:?\s*(\d{3,4})/i),
-              solved: grab(/Total Problems Solved\s*:?\s*(?:<[^>]*>\s*)*(\d+)/i),
-              contests: grab(/Contests\s*\((\d+)\)/i) ?? grab(/Contests? Participated\s*:?\s*(?:<[^>]*>\s*)*(\d+)/i),
-            });
-          },
-          async () => { const x = await json([`https://codechef-api.vercel.app/handle/${U}`]); return x.highestRating ? { max: x.highestRating } : null; },
-          async () => { const x = await json([`https://competeapi.vercel.app/user/codechef/${U}/`]); const r = x.highest_rating || x.highestRating; return r ? { max: Number(r) } : null; },
-        ]);
-        if (d.max != null) show('max-cc', `${d.max} (${ccStars(d.max)} Star)`, d.src.max);
-        applyCounts('cc', d);
-      })().catch(() => {});
+      // CodeChef: unofficial API, then scrape "Highest Rating" from the profile page
+      tryEach([
+        async () => {
+          const d = JSON.parse(await fetchText([`https://codechef-api.vercel.app/handle/${USERS.codechef}`]));
+          return d.highestRating || null;
+        },
+        async () => {
+          const html = await fetchText(viaProxies(`https://www.codechef.com/users/${USERS.codechef}`));
+          const m = html.match(/Highest Rating\s*:?\s*(\d{3,4})/i);
+          return m ? Number(m[1]) : null;
+        },
+      ]).then((r) => r && show('max-cc', `${r} (${ccStars(r)} Star)`));
 
-      // LeetCode: GraphQL (max contest rating, solved, contests attended), then unofficial APIs
-      (async () => {
-        const U = USERS.leetcode;
-        const lcFrom = (hist, solved, contests) => {
-          const att = (hist || []).filter((c) => c.attended);
-          return nonEmpty({ max: maxOf(att, 'rating'), solved: solved ?? null, contests: contests ?? (att.length || null) });
-        };
-        const gql = JSON.stringify({
-          query: 'query($u:String!){matchedUser(username:$u){submitStatisticsGlobal{acSubmissionNum{difficulty count}}} userContestRanking(username:$u){attendedContestsCount} userContestRankingHistory(username:$u){attended rating}}',
-          variables: { u: U },
-        });
-        const lcSolved = () => tryEach([
-          async () => { const x = await json([`https://leetcode-api-faisalshohag.vercel.app/${U}`]); return x.totalSolved || null; },
-          async () => { const x = await json([`https://alfa-leetcode-api.onrender.com/${U}/solved`]); return x.solvedProblem || null; },
-          async () => {
-            const q = JSON.stringify({ query: 'query($u:String!){matchedUser(username:$u){submitStatisticsGlobal{acSubmissionNum{difficulty count}}}}', variables: { u: U } });
-            const x = (await json(['https://leetcode.com/graphql', `https://corsproxy.io/?url=${encodeURIComponent('https://leetcode.com/graphql')}`],
-              { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: q })).data;
-            return x.matchedUser?.submitStatisticsGlobal?.acSubmissionNum?.find((n) => n.difficulty === 'All')?.count || null;
-          },
-        ]);
-        const withSolved = (fn) => async () => {
-          const r = await fn();
-          if (r && r.solved == null) r.solved = await lcSolved();
-          return r;
-        };
-        const d = await gather('leetcode', [
-          async () => {
-            const r = (await json(
-              ['https://leetcode.com/graphql', `https://corsproxy.io/?url=${encodeURIComponent('https://leetcode.com/graphql')}`],
-              { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: gql }
-            )).data;
-            const all = r.matchedUser?.submitStatisticsGlobal?.acSubmissionNum?.find((x) => x.difficulty === 'All');
-            return lcFrom(r.userContestRankingHistory, all?.count, r.userContestRanking?.attendedContestsCount);
-          },
-          async () => {
-            const [c, s] = await Promise.all([
-              json([`https://alfa-leetcode-api.onrender.com/userContestRankingInfo/${U}`]),
-              json([`https://alfa-leetcode-api.onrender.com/${U}/solved`]).catch(() => null),
-            ]);
-            return lcFrom(c.data.userContestRankingHistory, s?.solvedProblem, c.data.userContestRanking?.attendedContestsCount);
-          },
-          async () => lcFrom((await json([`https://leetcode-api-pied.vercel.app/user/${U}/contests`])).userContestRankingHistory),
-        ].map(withSolved));
-        if (d.max != null) show('max-lc', String(d.max), d.src.max);
-        applyCounts('lc', d);
-      })().catch(() => {});
+      // LeetCode: unofficial API, then GraphQL via proxy (highest attended contest rating)
+      const lcQuery = JSON.stringify({
+        query: 'query($u:String!){userContestRankingHistory(username:$u){attended rating}}',
+        variables: { u: USERS.leetcode },
+      });
+      tryEach([
+        async () => {
+          const d = JSON.parse(await fetchText([`https://alfa-leetcode-api.onrender.com/userContestRankingInfo/${USERS.leetcode}`]));
+          return d.data.userContestRankingHistory;
+        },
+        async () => {
+          const d = JSON.parse(await fetchText(
+            ['https://leetcode.com/graphql', `https://corsproxy.io/?url=${encodeURIComponent('https://leetcode.com/graphql')}`],
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: lcQuery }
+          ));
+          return d.data.userContestRankingHistory;
+        },
+      ]).then((hist) => {
+        const att = (hist || []).filter((c) => c.attended);
+        if (att.length) show('max-lc', String(Math.round(Math.max(...att.map((c) => c.rating)))));
+      });
 
       // Theme toggle
       const htmlEl = document.documentElement;
