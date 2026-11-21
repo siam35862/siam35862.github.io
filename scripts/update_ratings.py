@@ -46,8 +46,21 @@ def atcoder(u):
     return out
 
 
+def browser_html(url):
+    """Last resort: load the page in a real headless Chromium (needs playwright)."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(user_agent=UA)
+        page.goto(url, wait_until="networkidle", timeout=60000)
+        page.wait_for_timeout(3000)
+        html = page.content() + "\n" + page.inner_text("body")
+        browser.close()
+    return html
+
+
 def fetch_profile_html(url):
-    """CodeChef may block datacenter IPs, so try direct, then public proxies."""
+    """CodeChef may block datacenter IPs, so try direct, then public proxies, then a real browser."""
     last = None
     for u in (url, "https://corsproxy.io/?url=" + quote(url, safe=""),
               "https://api.allorigins.win/raw?url=" + quote(url, safe="")):
@@ -58,6 +71,14 @@ def fetch_profile_html(url):
             last = Exception("page loaded but no stats in it (blocked?)")
         except Exception as e:
             last = e
+        print("  codechef source failed:", last)
+    try:
+        html = browser_html(url)
+        if "Total Problems Solved" in html or "Highest Rating" in html:
+            return html
+        last = Exception("browser loaded the page but no stats in it")
+    except Exception as e:
+        last = e
     raise last
 
 
