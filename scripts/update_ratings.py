@@ -2,14 +2,15 @@
 """Fetch max rating, problems solved and contests attended server-side (no CORS)
 and write ratings.json. A value that can't be fetched keeps its previous value."""
 import json, re, datetime, urllib.request
+from urllib.parse import quote
 
 USERS = {"codeforces": "siam-35862", "codechef": "siam35862",
          "atcoder": "siam35862", "leetcode": "siam35862"}
-UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
+UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 
 def get(url, data=None, headers=None):
-    h = {"User-Agent": UA, **(headers or {})}
+    h = {"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9", **(headers or {})}
     req = urllib.request.Request(url, data=data, headers=h)
     with urllib.request.urlopen(req, timeout=60) as r:
         return r.read().decode("utf-8", "replace")
@@ -20,10 +21,18 @@ def codeforces(u):
     info = json.loads(get(base + f"user.info?handles={u}"))["result"][0]
     rating = json.loads(get(base + f"user.rating?handle={u}"))["result"]
     status = json.loads(get(base + f"user.status?handle={u}"))["result"]
-    solved = {(s["problem"].get("contestId"), s["problem"]["index"]) for s in status
-              if s.get("verdict") == "OK"}
+    solved = {(s["problem"].get("contestId") or s["problem"].get("problemsetName"), s["problem"]["index"])
+              for s in status if s.get("verdict") == "OK"}
+    count = len(solved)
+    try:  # the profile page also counts solves the API can't see (e.g. private groups)
+        html = get(f"https://codeforces.com/profile/{u}")
+        m = re.search(r"([\d,]+)\s+problems?\s*</div>\s*<div[^>]*>\s*solved for all time", html, re.I)
+        if m:
+            count = max(count, int(m.group(1).replace(",", "")))
+    except Exception as e:
+        print("  codeforces profile page failed:", e)
     return {"max": info["maxRating"], "rank": info["maxRank"],
-            "solved": len(solved), "contests": len(rating)}
+            "solved": count, "contests": len(rating)}
 
 
 def atcoder(u):
@@ -37,16 +46,34 @@ def atcoder(u):
     return out
 
 
-def codechef(u):
-    html = get(f"https://www.codechef.com/users/{u}")
+def fetch_profile_html(url):
+    """CodeChef may block datacenter IPs, so try direct, then public proxies."""
+    last = None
+    for u in (url, "https://corsproxy.io/?url=" + quote(url, safe=""),
+              "https://api.allorigins.win/raw?url=" + quote(url, safe="")):
+        try:
+            html = get(u, headers={"Accept": "text/html,application/xhtml+xml"})
+            if "Total Problems Solved" in html or "Highest Rating" in html:
+                return html
+            last = Exception("page loaded but no stats in it (blocked?)")
+        except Exception as e:
+            last = e
+    raise last
 
-    def grab(pattern):
-        m = re.search(pattern, html, re.I)
-        return int(m.group(1)) if m else None
+
+def codechef(u):
+    html = fetch_profile_html(f"https://www.codechef.com/users/{u}")
+
+    def grab(*patterns):
+        for p in patterns:
+            m = re.search(p, html, re.I)
+            if m:
+                return int(m.group(1))
+        return None
 
     return {"max": grab(r"Highest Rating\s*:?\s*(\d{3,4})"),
-            "solved": grab(r"Total Problems Solved\s*:?\s*(\d+)"),
-            "contests": grab(r"Contests? Participated\s*:?\s*(?:<[^>]*>\s*)*(\d+)")}
+            "solved": grab(r"Total Problems Solved\s*:?\s*(?:<[^>]*>\s*)*(\d+)"),
+            "contests": grab(r"Contests\s*\((\d+)\)", r"Contests? Participated\s*:?\s*(?:<[^>]*>\s*)*(\d+)")}
 
 
 def leetcode(u):
@@ -57,8 +84,13 @@ def leetcode(u):
     d = json.loads(get("https://leetcode.com/graphql", json.dumps(q).encode(),
                        {"Content-Type": "application/json", "Referer": "https://leetcode.com"}))["data"]
     hist = [c["rating"] for c in (d["userContestRankingHistory"] or []) if c["attended"]]
-    stats = (d["matchedUser"] or {}).get("submitStatisticsGlobal", {}).get("acSubmissionNum", [])
+    stats = ((d.get("matchedUser") or {}).get("submitStatisticsGlobal") or {}).get("acSubmissionNum", [])
     solved = next((x["count"] for x in stats if x["difficulty"] == "All"), None)
+    if solved is None:
+        try:
+            solved = json.loads(get(f"https://leetcode-api-faisalshohag.vercel.app/{u}")).get("totalSolved")
+        except Exception as e:
+            print("  leetcode solved fallback failed:", e)
     ranking = d.get("userContestRanking") or {}
     return {"max": round(max(hist)) if hist else None, "solved": solved,
             "contests": ranking.get("attendedContestsCount", len(hist) or None)}
