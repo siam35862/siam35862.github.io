@@ -21,7 +21,7 @@ def codeforces(u):
     rating = json.loads(get(base + f"user.rating?handle={u}"))["result"]
     status = json.loads(get(base + f"user.status?handle={u}"))["result"]
     solved = {(s["problem"].get("contestId"), s["problem"]["index"]) for s in status
-              if s.get("verdict") == "OK" and (s["problem"].get("contestId") or 0) < 100000}
+              if s.get("verdict") == "OK"}
     return {"max": info["maxRating"], "rank": info["maxRank"],
             "solved": len(solved), "contests": len(rating)}
 
