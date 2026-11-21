@@ -1,7 +1,16 @@
 {
-  "updated": null,
-  "codeforces": null,
-  "codechef": null,
-  "atcoder": null,
-  "leetcode": null
+  "updated": "2026-11-21T20:15:41+00:00",
+  "codeforces": {
+    "max": 1530,
+    "rank": "specialist"
+  },
+  "codechef": {
+    "max": 1747
+  },
+  "atcoder": {
+    "max": 921
+  },
+  "leetcode": {
+    "max": 1585
+  }
 }
