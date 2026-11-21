@@ -350,16 +350,38 @@
       render('list-iupc', iupc);
       render('list-solo', solo);
 
-      // Live max ratings (falls back to README values if a request fails)
-      const H = { cf: 'siam-35862', cc: 'siam35862', ac: 'siam35862', lc: 'siam35862' };
-      const getJSON = async (url) => {
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 8000);
-        try {
-          const r = await fetch(url, { signal: ctrl.signal });
-          if (!r.ok) throw new Error(r.status);
-          return await r.json();
-        } finally { clearTimeout(t); }
+      // ---- Live max ratings, looked up by username ----
+      // Falls back to the README value already in the page if every source fails.
+      const USERS = {
+        codeforces: 'siam-35862',
+        codechef: 'siam35862',
+        atcoder: 'siam35862',
+        leetcode: 'siam35862',
+      };
+
+      // Try the URL directly, then through public CORS proxies (browsers block many judge sites).
+      const viaProxies = (url) => [
+        url,
+        `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+      ];
+      const fetchText = async (urls, init) => {
+        let lastErr;
+        for (const u of urls) {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 9000);
+          try {
+            const r = await fetch(u, { ...init, signal: ctrl.signal });
+            if (!r.ok) throw new Error(`${r.status} ${u}`);
+            return await r.text();
+          } catch (e) { lastErr = e; } finally { clearTimeout(t); }
+        }
+        throw lastErr;
+      };
+      const tryEach = async (fns) => {
+        for (const fn of fns) { try { const v = await fn(); if (v != null) return v; } catch (e) { console.debug('rating source failed:', e); } }
+        return null;
       };
       const show = (id, text) => {
         const el = document.getElementById(id);
@@ -367,29 +389,62 @@
         el.innerHTML = esc(text) + ' <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle" title="Fetched live"></span>';
       };
       const cap = (w) => w.replace(/\b\w/g, (c) => c.toUpperCase());
+      const ccStars = (r) => (r >= 2500 ? 7 : r >= 2200 ? 6 : r >= 2000 ? 5 : r >= 1800 ? 4 : r >= 1600 ? 3 : r >= 1400 ? 2 : 1);
 
-      // Codeforces: official API
-      getJSON(`https://codeforces.com/api/user.info?handles=${H.cf}`).then((d) => {
+      // Codeforces: official API (maxRating + maxRank)
+      tryEach([async () => {
+        const d = JSON.parse(await fetchText(viaProxies(`https://codeforces.com/api/user.info?handles=${USERS.codeforces}`)));
         const u = d.result[0];
-        show('max-cf', `${u.maxRating} (${cap(u.maxRank)})`);
-      }).catch(() => {});
+        return u.maxRating ? `${u.maxRating} (${cap(u.maxRank)})` : null;
+      }]).then((v) => v && show('max-cf', v));
 
-      // AtCoder: contest history
-      getJSON(`https://atcoder.jp/users/${H.ac}/history/json`).then((h) => {
-        const rated = h.filter((c) => c.IsRated);
-        if (rated.length) show('max-ac', String(Math.max(...rated.map((c) => c.NewRating))));
-      }).catch(() => {});
+      // AtCoder: contest history, highest NewRating
+      tryEach([
+        async () => JSON.parse(await fetchText([`https://kenkoooo.com/atcoder/proxy/users/${USERS.atcoder}/history/json`])),
+        async () => JSON.parse(await fetchText(viaProxies(`https://atcoder.jp/users/${USERS.atcoder}/history/json`))),
+      ]).then((h) => {
+        const rated = (h || []).filter((c) => c.IsRated);
+        if (!rated.length) return;
+        const max = Math.max(...rated.map((c) => c.NewRating));
+        const el = document.getElementById('max-ac');
+        const keepRank = el && el.textContent.startsWith('903') && max === 903 ? ' (6 Kyu)' : '';
+        show('max-ac', `${max}${keepRank}`);
+      });
 
-      // CodeChef: unofficial public API
-      getJSON(`https://codechef-api.vercel.app/handle/${H.cc}`).then((d) => {
-        if (d.highestRating) show('max-cc', `${d.highestRating}${d.stars ? ' (' + d.stars + ')' : ''}`);
-      }).catch(() => {});
+      // CodeChef: unofficial API, then scrape "Highest Rating" from the profile page
+      tryEach([
+        async () => {
+          const d = JSON.parse(await fetchText([`https://codechef-api.vercel.app/handle/${USERS.codechef}`]));
+          return d.highestRating || null;
+        },
+        async () => {
+          const html = await fetchText(viaProxies(`https://www.codechef.com/users/${USERS.codechef}`));
+          const m = html.match(/Highest Rating\s*:?\s*(\d{3,4})/i);
+          return m ? Number(m[1]) : null;
+        },
+      ]).then((r) => r && show('max-cc', `${r} (${ccStars(r)} Star)`));
 
-      // LeetCode: unofficial public API (contest history)
-      getJSON(`https://alfa-leetcode-api.onrender.com/userContestRankingInfo/${H.lc}`).then((d) => {
-        const hist = (d.data.userContestRankingHistory || []).filter((c) => c.attended);
-        if (hist.length) show('max-lc', String(Math.round(Math.max(...hist.map((c) => c.rating)))));
-      }).catch(() => {});
+      // LeetCode: GraphQL contest history, highest attended rating
+      const lcQuery = JSON.stringify({
+        query: 'query($u:String!){userContestRankingHistory(username:$u){attended rating}}',
+        variables: { u: USERS.leetcode },
+      });
+      tryEach([
+        async () => {
+          const d = JSON.parse(await fetchText([`https://alfa-leetcode-api.onrender.com/userContestRankingInfo/${USERS.leetcode}`]));
+          return d.data.userContestRankingHistory;
+        },
+        async () => {
+          const d = JSON.parse(await fetchText(
+            [`https://leetcode.com/graphql`, `https://corsproxy.io/?url=${encodeURIComponent('https://leetcode.com/graphql')}`],
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: lcQuery }
+          ));
+          return d.data.userContestRankingHistory;
+        },
+      ]).then((hist) => {
+        const att = (hist || []).filter((c) => c.attended);
+        if (att.length) show('max-lc', String(Math.round(Math.max(...att.map((c) => c.rating)))));
+      });
 
       // Theme toggle
       const htmlEl = document.documentElement;
