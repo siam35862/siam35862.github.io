@@ -434,16 +434,21 @@
       (async () => {
         const U = USERS.codeforces, base = 'https://codeforces.com/api/';
         const d = await gather('codeforces', [async () => {
-          const [info, rating, status] = await Promise.all([
+          const [info, rating, status, profile] = await Promise.all([
             json(viaProxies(`${base}user.info?handles=${U}`)),
             json(viaProxies(`${base}user.rating?handle=${U}`)).catch(() => null),
             json(viaProxies(`${base}user.status?handle=${U}`)).catch(() => null),
+            fetchText(viaProxies(`https://codeforces.com/profile/${U}`)).catch(() => null),
           ]);
           const u = info.result[0];
-          const solved = status
+          const apiSolved = status
             ? new Set(status.result.filter((s) => s.verdict === 'OK')
-                .map((s) => `${s.problem.contestId}-${s.problem.index}`)).size
-            : null;
+                .map((s) => `${s.problem.contestId || s.problem.problemsetName}-${s.problem.index}`)).size
+            : 0;
+          // The profile page also counts solves the API can't see (e.g. private groups), so prefer the larger number.
+          const mp = profile && profile.match(/([\d,]+)\s+problems?\s*<\/div>\s*<div[^>]*>\s*solved for all time/i);
+          const profileSolved = mp ? Number(mp[1].replace(/,/g, '')) : 0;
+          const solved = Math.max(apiSolved, profileSolved) || null;
           return nonEmpty({ max: u.maxRating, rank: u.maxRank, solved, contests: rating ? rating.result.length : null });
         }]);
         if (d.max != null) show('max-cf', `${d.max}${d.rank ? ` (${cap(d.rank)})` : ''}`, d.src.max);
@@ -473,8 +478,8 @@
             const grab = (re) => { const m = html.match(re); return m ? Number(m[1]) : null; };
             return nonEmpty({
               max: grab(/Highest Rating\s*:?\s*(\d{3,4})/i),
-              solved: grab(/Total Problems Solved\s*:?\s*(\d+)/i),
-              contests: grab(/Contests? Participated\s*:?\s*(?:<[^>]*>\s*)*(\d+)/i),
+              solved: grab(/Total Problems Solved\s*:?\s*(?:<[^>]*>\s*)*(\d+)/i),
+              contests: grab(/Contests\s*\((\d+)\)/i) ?? grab(/Contests? Participated\s*:?\s*(?:<[^>]*>\s*)*(\d+)/i),
             });
           },
           async () => { const x = await json([`https://codechef-api.vercel.app/handle/${U}`]); return x.highestRating ? { max: x.highestRating } : null; },
@@ -495,6 +500,21 @@
           query: 'query($u:String!){matchedUser(username:$u){submitStatisticsGlobal{acSubmissionNum{difficulty count}}} userContestRanking(username:$u){attendedContestsCount} userContestRankingHistory(username:$u){attended rating}}',
           variables: { u: U },
         });
+        const lcSolved = () => tryEach([
+          async () => { const x = await json([`https://leetcode-api-faisalshohag.vercel.app/${U}`]); return x.totalSolved || null; },
+          async () => { const x = await json([`https://alfa-leetcode-api.onrender.com/${U}/solved`]); return x.solvedProblem || null; },
+          async () => {
+            const q = JSON.stringify({ query: 'query($u:String!){matchedUser(username:$u){submitStatisticsGlobal{acSubmissionNum{difficulty count}}}}', variables: { u: U } });
+            const x = (await json(['https://leetcode.com/graphql', `https://corsproxy.io/?url=${encodeURIComponent('https://leetcode.com/graphql')}`],
+              { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: q })).data;
+            return x.matchedUser?.submitStatisticsGlobal?.acSubmissionNum?.find((n) => n.difficulty === 'All')?.count || null;
+          },
+        ]);
+        const withSolved = (fn) => async () => {
+          const r = await fn();
+          if (r && r.solved == null) r.solved = await lcSolved();
+          return r;
+        };
         const d = await gather('leetcode', [
           async () => {
             const r = (await json(
@@ -512,7 +532,7 @@
             return lcFrom(c.data.userContestRankingHistory, s?.solvedProblem, c.data.userContestRanking?.attendedContestsCount);
           },
           async () => lcFrom((await json([`https://leetcode-api-pied.vercel.app/user/${U}/contests`])).userContestRankingHistory),
-        ]);
+        ].map(withSolved));
         if (d.max != null) show('max-lc', String(d.max), d.src.max);
         applyCounts('lc', d);
       })().catch(() => {});
