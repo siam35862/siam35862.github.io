@@ -441,7 +441,7 @@
           ]);
           const u = info.result[0];
           const solved = status
-            ? new Set(status.result.filter((s) => s.verdict === 'OK' && (s.problem.contestId || 0) < 100000)
+            ? new Set(status.result.filter((s) => s.verdict === 'OK')
                 .map((s) => `${s.problem.contestId}-${s.problem.index}`)).size
             : null;
           return nonEmpty({ max: u.maxRating, rank: u.maxRank, solved, contests: rating ? rating.result.length : null });
