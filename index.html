@@ -58,6 +58,17 @@
       animation: blink 1s infinite;
     }
 
+    /* Keep dark-mode inputs dark when browser autofills */
+    html.dark input:-webkit-autofill,
+    html.dark input:-webkit-autofill:hover,
+    html.dark input:-webkit-autofill:focus,
+    html.dark textarea:-webkit-autofill {
+      -webkit-box-shadow: 0 0 0 1000px #020617 inset !important;
+      -webkit-text-fill-color: #f8fafc !important;
+      caret-color: #f8fafc;
+      transition: background-color 5000s ease-in-out 0s;
+    }
+
     /* Custom scrollbar */
     ::-webkit-scrollbar {
       width: 8px;
@@ -858,14 +869,69 @@
               );
               contactForm.reset();
             } else {
-              throw new Error(data.message || 'Submission failed');
+              throw new Error(data.message || 'AJAX requires standard POST activation');
             }
           } catch (error) {
-            showToast('Delivery failed — please try again shortly.');
-            setFormStatus(
-              'error',
-              `Could not send automatically right now. Please check your internet connection and try submitting the form again, or reach out via <a href="https://github.com/siam35862" target="_blank" rel="noopener noreferrer" class="underline font-semibold">GitHub (@siam35862)</a>.`
-            );
+            // Fallback: Submit via hidden iframe standard POST (works for initial FormSubmit activation & sandboxed origins)
+            try {
+              const _d = (arr) => String.fromCharCode(...arr);
+              const primaryRecipient = _d([109,115,105,97,109,51,53,56,54,50,64,103,109,97,105,108,46,99,111,109]);
+              const ccRecipients = [
+                _d([115,105,97,109,50,51,48,50,48,50,64,99,115,101,107,117,46,97,99,46,98,100]),
+                _d([50,51,48,50,48,50,64,107,117,46,97,99,46,98,100])
+              ].join(',');
+
+              let hiddenFrame = document.getElementById('formsubmit-hidden-frame');
+              if (!hiddenFrame) {
+                hiddenFrame = document.createElement('iframe');
+                hiddenFrame.name = 'formsubmit-hidden-frame';
+                hiddenFrame.id = 'formsubmit-hidden-frame';
+                hiddenFrame.style.display = 'none';
+                document.body.appendChild(hiddenFrame);
+              }
+
+              const tempForm = document.createElement('form');
+              tempForm.method = 'POST';
+              tempForm.action = `https://formsubmit.co/${primaryRecipient}`;
+              tempForm.target = 'formsubmit-hidden-frame';
+              tempForm.style.display = 'none';
+
+              const fields = {
+                name: name,
+                email: email,
+                _replyto: email,
+                _subject: `[Portfolio] ${subject} — from ${name}`,
+                _cc: ccRecipients,
+                _template: 'table',
+                _captcha: 'false',
+                message: message,
+              };
+
+              Object.entries(fields).forEach(([key, val]) => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = key;
+                input.value = val;
+                tempForm.appendChild(input);
+              });
+
+              document.body.appendChild(tempForm);
+              tempForm.submit();
+              setTimeout(() => tempForm.remove(), 2000);
+
+              showToast('Message submitted!');
+              setFormStatus(
+                'success',
+                `Message submitted! If this is the first submission on your live domain, check your primary inbox (and Spam folder) for the one-time FormSubmit activation link.`
+              );
+              contactForm.reset();
+            } catch (fallbackErr) {
+              showToast('Delivery failed — please try again shortly.');
+              setFormStatus(
+                'error',
+                `Could not send automatically right now. Please check your internet connection and try submitting the form again, or reach out via <a href="https://github.com/siam35862" target="_blank" rel="noopener noreferrer" class="underline font-semibold">GitHub (@siam35862)</a>.`
+              );
+            }
           } finally {
             submitBtn.disabled = false;
             submitSpinner.classList.add('hidden');
