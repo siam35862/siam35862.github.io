@@ -351,7 +351,8 @@
       render('list-solo', solo);
 
       // ---- Live max ratings, looked up by username ----
-      // Falls back to the README value already in the page if every source fails.
+      // Order: live browser lookups first, then ratings.json (refreshed daily by a GitHub Action),
+      // and finally the README value already written in the page.
       const USERS = {
         codeforces: 'siam-35862',
         codechef: 'siam35862',
@@ -359,7 +360,6 @@
         leetcode: 'siam35862',
       };
 
-      // Try the URL directly, then through public CORS proxies (browsers block many judge sites).
       const viaProxies = (url) => [
         url,
         `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
@@ -379,72 +379,86 @@
         }
         throw lastErr;
       };
+      const json = async (urls, init) => JSON.parse(await fetchText(urls, init));
+      // Each source returns a value, or null/throws to fall through to the next one.
       const tryEach = async (fns) => {
         for (const fn of fns) { try { const v = await fn(); if (v != null) return v; } catch (e) { console.debug('rating source failed:', e); } }
         return null;
       };
-      const show = (id, text) => {
+      let fileCache;
+      const ratingsFile = () => (fileCache ||= json(['ratings.json'], { cache: 'no-store' }).catch(() => ({})));
+      const fromFile = (key) => async () => {
+        const e = (await ratingsFile())[key];
+        return e && e.max ? { ...e, src: 'file' } : null;
+      };
+
+      const show = (id, text, src) => {
         const el = document.getElementById(id);
         if (!el) return;
-        el.innerHTML = esc(text) + ' <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle" title="Fetched live"></span>';
+        const tip = src === 'file' ? 'Updated daily by GitHub Action' : 'Fetched live';
+        el.innerHTML = esc(text) + ` <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle" title="${tip}"></span>`;
       };
       const cap = (w) => w.replace(/\b\w/g, (c) => c.toUpperCase());
       const ccStars = (r) => (r >= 2500 ? 7 : r >= 2200 ? 6 : r >= 2000 ? 5 : r >= 1800 ? 4 : r >= 1600 ? 3 : r >= 1400 ? 2 : 1);
+      const acKyu = (r) => (r < 2000 ? ` (${Math.max(10 - Math.floor(r / 200), 1)} Kyu)` : '');
+      const maxOf = (arr, key) => (arr.length ? Math.round(Math.max(...arr.map((c) => c[key]))) : null);
 
-      // Codeforces: official API (maxRating + maxRank)
-      tryEach([async () => {
-        const d = JSON.parse(await fetchText(viaProxies(`https://codeforces.com/api/user.info?handles=${USERS.codeforces}`)));
-        const u = d.result[0];
-        return u.maxRating ? `${u.maxRating} (${cap(u.maxRank)})` : null;
-      }]).then((v) => v && show('max-cf', v));
+      // Codeforces: official API
+      tryEach([
+        async () => {
+          const u = (await json(viaProxies(`https://codeforces.com/api/user.info?handles=${USERS.codeforces}`))).result[0];
+          return u.maxRating ? { max: u.maxRating, rank: u.maxRank } : null;
+        },
+        fromFile('codeforces'),
+      ]).then((v) => v && show('max-cf', `${v.max} (${cap(v.rank || '')})`.replace(' ()', ''), v.src));
 
       // AtCoder: contest history, highest NewRating
       tryEach([
-        async () => JSON.parse(await fetchText([`https://kenkoooo.com/atcoder/proxy/users/${USERS.atcoder}/history/json`])),
-        async () => JSON.parse(await fetchText(viaProxies(`https://atcoder.jp/users/${USERS.atcoder}/history/json`))),
-      ]).then((h) => {
-        const rated = (h || []).filter((c) => c.IsRated);
-        if (!rated.length) return;
-        const max = Math.max(...rated.map((c) => c.NewRating));
-        const el = document.getElementById('max-ac');
-        const keepRank = el && el.textContent.startsWith('903') && max === 903 ? ' (6 Kyu)' : '';
-        show('max-ac', `${max}${keepRank}`);
-      });
+        async () => {
+          const h = await json([`https://kenkoooo.com/atcoder/proxy/users/${USERS.atcoder}/history/json`]);
+          return { max: maxOf(h.filter((c) => c.IsRated), 'NewRating') };
+        },
+        async () => {
+          const h = await json(viaProxies(`https://atcoder.jp/users/${USERS.atcoder}/history/json`));
+          return { max: maxOf(h.filter((c) => c.IsRated), 'NewRating') };
+        },
+        fromFile('atcoder'),
+      ]).then((v) => v && v.max && show('max-ac', `${v.max}${acKyu(v.max)}`, v.src));
 
-      // CodeChef: unofficial API, then scrape "Highest Rating" from the profile page
+      // CodeChef
       tryEach([
         async () => {
-          const d = JSON.parse(await fetchText([`https://codechef-api.vercel.app/handle/${USERS.codechef}`]));
-          return d.highestRating || null;
+          const d = await json([`https://codechef-api.vercel.app/handle/${USERS.codechef}`]);
+          return d.highestRating ? { max: d.highestRating } : null;
+        },
+        async () => {
+          const d = await json([`https://competeapi.vercel.app/user/codechef/${USERS.codechef}/`]);
+          const r = d.highest_rating || d.highestRating || d.max_rating;
+          return r ? { max: Number(r) } : null;
         },
         async () => {
           const html = await fetchText(viaProxies(`https://www.codechef.com/users/${USERS.codechef}`));
           const m = html.match(/Highest Rating\s*:?\s*(\d{3,4})/i);
-          return m ? Number(m[1]) : null;
+          return m ? { max: Number(m[1]) } : null;
         },
-      ]).then((r) => r && show('max-cc', `${r} (${ccStars(r)} Star)`));
+        fromFile('codechef'),
+      ]).then((v) => v && show('max-cc', `${v.max} (${ccStars(v.max)} Star)`, v.src));
 
-      // LeetCode: GraphQL contest history, highest attended rating
+      // LeetCode: highest attended contest rating
       const lcQuery = JSON.stringify({
         query: 'query($u:String!){userContestRankingHistory(username:$u){attended rating}}',
         variables: { u: USERS.leetcode },
       });
+      const lcMax = (hist) => { const m = maxOf((hist || []).filter((c) => c.attended), 'rating'); return m ? { max: m } : null; };
       tryEach([
-        async () => {
-          const d = JSON.parse(await fetchText([`https://alfa-leetcode-api.onrender.com/userContestRankingInfo/${USERS.leetcode}`]));
-          return d.data.userContestRankingHistory;
-        },
-        async () => {
-          const d = JSON.parse(await fetchText(
-            [`https://leetcode.com/graphql`, `https://corsproxy.io/?url=${encodeURIComponent('https://leetcode.com/graphql')}`],
-            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: lcQuery }
-          ));
-          return d.data.userContestRankingHistory;
-        },
-      ]).then((hist) => {
-        const att = (hist || []).filter((c) => c.attended);
-        if (att.length) show('max-lc', String(Math.round(Math.max(...att.map((c) => c.rating)))));
-      });
+        async () => lcMax((await json([`https://alfa-leetcode-api.onrender.com/userContestRankingInfo/${USERS.leetcode}`])).data.userContestRankingHistory),
+        async () => lcMax((await json([`https://leetcode-api-pied.vercel.app/user/${USERS.leetcode}/contests`])).userContestRankingHistory),
+        async () => lcMax((await json(
+          ['https://leetcode.com/graphql', `https://corsproxy.io/?url=${encodeURIComponent('https://leetcode.com/graphql')}`],
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: lcQuery }
+        )).data.userContestRankingHistory),
+        fromFile('leetcode'),
+      ]).then((v) => v && show('max-lc', String(v.max), v.src));
 
       // Theme toggle
       const htmlEl = document.documentElement;
