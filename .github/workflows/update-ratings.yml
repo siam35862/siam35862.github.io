@@ -13,6 +13,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install headless browser (CodeChef fallback)
+        continue-on-error: true
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
       - name: Fetch ratings
         run: python scripts/update_ratings.py
       - name: Commit if changed
